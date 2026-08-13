@@ -213,24 +213,6 @@ select.chip{appearance:none}
 }
 .switch input:checked + .sl{background:var(--want)}
 .switch input:checked + .sl:before{transform:translateX(19px)}
-.detail-photo{
-  margin:10px 0 6px; border-radius:14px; overflow:hidden; background:#f0efec; position:relative;
-}
-.detail-photo .dp-img{width:100%; aspect-ratio:16/10; object-fit:cover; display:block; background:#e6e5e1}
-.detail-photo .dp-ph{
-  aspect-ratio:16/10; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
-  color:var(--ink-3); font-size:11.5px; background:linear-gradient(135deg,#f3f2ef,#e9e8e3);
-}
-.detail-photo .dp-ph .dp-icon{font-size:30px; opacity:.55}
-.detail-photo .dp-credit{
-  position:absolute; right:7px; bottom:7px; background:rgba(11,11,11,.5); color:#fff;
-  font-size:9.5px; padding:3px 8px; border-radius:9px; line-height:1.3; max-width:80%;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-}
-.detail-photo .dp-retry{
-  position:absolute; right:7px; top:7px; background:rgba(255,255,255,.92); border:0; border-radius:8px;
-  padding:5px 9px; font-size:10.5px; font-weight:800; color:var(--ink-2); cursor:pointer; font-family:inherit;
-}
 .info-row{display:flex; gap:8px; font-size:13px; padding:3.5px 0; line-height:1.55}
 .info-row .ik{flex:0 0 20px; text-align:center}
 .info-row a{color:var(--accent); font-weight:700; word-break:break-all; text-decoration:none}
@@ -11606,71 +11588,6 @@ function renderStats(){
   document.getElementById("statsBody").innerHTML = html;
 }
 
-/* ================= 施設画像（詳細シート） ================= */
-function stripTags(s){ return String(s).replace(/<[^>]+>/g,"").trim(); }
-async function fetchAutoPhoto(f){
-  if(store.photos[f.id]) return store.photos[f.id];
-  const query = f.name+" "+String(f.pref||"").replace(/[都道府県]$/,"");
-  try{
-    const url="https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch="+
-      encodeURIComponent(query)+"&gsrnamespace=6&gsrlimit=3&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=520&format=json&origin=*";
-    const res=await fetch(url);
-    const js=await res.json();
-    const pages=js.query&&js.query.pages;
-    if(pages){
-      const cand=Object.values(pages).find(p=>p.imageinfo&&p.imageinfo[0]);
-      const ii=cand&&cand.imageinfo[0];
-      if(ii&&(ii.thumburl||ii.url)){
-        const meta=ii.extmetadata||{};
-        const artist=meta.Artist? stripTags(meta.Artist.value):"";
-        const credit=(artist? artist+" / ":"")+"Wikimedia Commons";
-        store.photos[f.id]={url:ii.thumburl||ii.url, credit:credit, source:"auto", tried:true};
-        save();
-        return store.photos[f.id];
-      }
-    }
-  }catch(e){}
-  store.photos[f.id]={url:null, tried:true, source:"auto"};
-  save();
-  return store.photos[f.id];
-}
-function photoPlaceholderHtml(loading){
-  return '<div class="dp-ph"><span class="dp-icon">📷</span><span>'+(loading?"画像を検索中…":"画像はまだありません")+'</span></div>';
-}
-function renderDetailPhotoInto(id, entry){
-  const area=document.getElementById("detailPhotoArea");
-  if(!area || area.dataset.fid!==id) return; // シートが閉じられた/別施設に切り替わった
-  if(entry && entry.url){
-    area.innerHTML='<img class="dp-img" src="'+esc(entry.url)+'" alt="" onerror="this.parentElement.innerHTML=photoPlaceholderHtml(false)+retryBtnHtml();">'+
-      (entry.credit? '<span class="dp-credit">'+esc(entry.credit)+'</span>':"")+retryBtnHtml();
-  }else{
-    area.innerHTML=photoPlaceholderHtml(false)+retryBtnHtml();
-  }
-}
-function retryBtnHtml(){
-  return '<button class="dp-retry" onclick="retryAutoPhoto(\''+currentId+'\')">🔍 画像を検索</button>';
-}
-function loadDetailPhoto(f){
-  const manual = f.info && f.info.image;
-  const area=document.getElementById("detailPhotoArea");
-  if(!area) return;
-  if(manual){
-    area.innerHTML='<img class="dp-img" src="'+esc(manual)+'" alt="" onerror="this.parentElement.innerHTML=photoPlaceholderHtml(false)+retryBtnHtml();">';
-    return;
-  }
-  const cached=store.photos[f.id];
-  if(cached){ renderDetailPhotoInto(f.id, cached); return; }
-  area.innerHTML=photoPlaceholderHtml(true);
-  fetchAutoPhoto(f).then(entry=>renderDetailPhotoInto(f.id, entry));
-}
-function retryAutoPhoto(id){
-  delete store.photos[id]; save();
-  const area=document.getElementById("detailPhotoArea");
-  if(area) area.innerHTML=photoPlaceholderHtml(true);
-  const f=allFacilities().find(x=>x.id===id);
-  if(f) fetchAutoPhoto(f).then(entry=>renderDetailPhotoInto(id, entry));
-}
-
 /* ================= detail sheet ================= */
 let currentId=null;
 function openDetail(id){
@@ -11682,8 +11599,7 @@ function openDetail(id){
   let html = '<div class="grip"></div>'+
     '<h2>'+esc(f.name)+'</h2>'+
     '<div class="loc"><span class="badge '+f.type+'">'+(TYPE_LABEL[f.type]||"")+'</span>　'+esc(f.pref)+" "+esc(f.city||"")+
-    '　<a href="'+gmapUrl(f)+'" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800;text-decoration:none">🗺️ Googleマップで開く</a></div>'+
-    '<div class="detail-photo" id="detailPhotoArea" data-fid="'+id+'">'+photoPlaceholderHtml(true)+'</div>';
+    '　<a href="'+gmapUrl(f)+'" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800;text-decoration:none">🗺️ Googleマップで開く</a></div>';
 
   if(!r.visits.length){
     html += '<button class="btn visited-mark" onclick="quickVisit()">♨️ 今日行った！（訪問済みにする）</button>';
@@ -11728,7 +11644,6 @@ function openDetail(id){
   const el = document.getElementById("detailSheet");
   el.innerHTML = html;
   showSheet("detailSheet");
-  loadDetailPhoto(f);
 }
 function quickVisit(){
   const r = rec(currentId); r.visits.push(todayStr()); r.want=false;
@@ -11852,7 +11767,6 @@ function openEditForm(){
     '<div class="form-field"><label>料金</label><input type="text" id="efFee" value="'+esc(i.fee||"")+'" placeholder="例：1,800円（90分）"></div>'+
     '<div class="form-field"><label>電話</label><input type="text" id="efPhone" value="'+esc(i.phone||"")+'" placeholder="例：03-xxxx-xxxx"></div>'+
     '<div class="form-field"><label>公式サイトURL</label><input type="text" id="efWeb" value="'+esc(i.web||"")+'" placeholder="https://..."></div>'+
-    '<div class="form-field"><label>画像URL（任意・指定すると自動検索より優先されます）</label><input type="text" id="efImage" value="'+esc(i.image||"")+'" placeholder="https://... （直接画像ファイルのURL）"></div>'+
     '<button class="btn primary" style="width:100%;padding:13px;font-size:15px" onclick="submitEditForm()">保存</button>';
   showSheet("addSheet");
 }
@@ -11866,8 +11780,7 @@ function submitEditForm(){
     hours:document.getElementById("efHours").value.trim(),
     fee:document.getElementById("efFee").value.trim(),
     phone:document.getElementById("efPhone").value.trim(),
-    web:document.getElementById("efWeb").value.trim(),
-    image:document.getElementById("efImage").value.trim()
+    web:document.getElementById("efWeb").value.trim()
   };
   for(const k of Object.keys(info)) if(!info[k]) delete info[k];
   if(id.startsWith("p")){
@@ -11937,10 +11850,6 @@ function jpHours(s){
     .replace(/Fr/g,"金").replace(/Sa/g,"土").replace(/Su/g,"日").replace(/PH/g,"祝")
     .replace(/\boff\b/g,"休").replace(/24\/7/g,"24時間").replace(/;\s*/g," ／ ").replace(/,/g,"・");
 }
-function commonsFilePathUrl(filename){
-  const f=String(filename).replace(/^File:/i,"");
-  return "https://commons.wikimedia.org/wiki/Special:FilePath/"+encodeURIComponent(f);
-}
 function tagsToInfo(t){
   const info={};
   const addr=t["addr:full"]||[t["addr:city"],t["addr:quarter"]||t["addr:suburb"]||t["addr:neighbourhood"],
@@ -11951,8 +11860,6 @@ function tagsToInfo(t){
   const web=t.website||t["contact:website"]||t.url; if(web) info.web=web;
   if(t.opening_hours) info.hours=jpHours(t.opening_hours);
   const fee=t.charge||((t.fee&&/\d/.test(t.fee))?t.fee:null); if(fee) info.fee=fee;
-  if(t.image && /^https?:\/\//.test(t.image)) info.image=t.image;
-  else if(t.wikimedia_commons && /^File:/i.test(t.wikimedia_commons)) info.image=commonsFilePathUrl(t.wikimedia_commons);
   return info;
 }
 /* infoをマージ（fillOnly=trueなら未設定の項目だけ埋める） */
@@ -12164,7 +12071,6 @@ window.removeVisit=removeVisit; window.setRating=setRating; window.toggleWant=to
 window.removeFacility=removeFacility; window.geoSearch=geoSearch; window.submitAdd=submitAdd;
 window.openEditForm=openEditForm; window.submitEditForm=submitEditForm; window.fetchDetailOsm=fetchDetailOsm;
 window.openImport=openImport; window.runImport=runImport; window.clearOsm=clearOsm;
-window.retryAutoPhoto=retryAutoPhoto; window.photoPlaceholderHtml=photoPlaceholderHtml; window.retryBtnHtml=retryBtnHtml;
 refreshAll();
 </script>
 </body>
